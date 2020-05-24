@@ -1,124 +1,131 @@
 <!DOCTYPE html>
 <html>
+  <head>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"
+      type="text/javascript"
+    ></script>
+    <title>Lab 5</title>
+  </head>
 
-<head>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
-  <title>Lab 5</title>
-</head>
-
-<body>
-  <script type="text/javascript" src="js/webcam.min.js"></script>
-  <h1>Lab 5 in DM2518</h1>
-  <div style="display: flex;">
-    <div>
-      <h2>Webcam</h2>
-      <div id="my_camera"></div>
+  <body>
+    <script type="text/javascript" src="js/webcam.min.js"></script>
+    <h1>Lab 5 in DM2518</h1>
+    <div style="display: flex;">
+      <div>
+        <h2>Webcam</h2>
+        <div id="my_camera"></div>
+      </div>
+      <div id="results" style="margin-left: 20px;"></div>
+      <div id="results_text" style="margin: 40px;"></div>
     </div>
-    <div id="results" style="margin-left: 20px;"></div>
-    <div id="results_text" style="margin: 40px;"></div>
 
-  </div>
+    <script type="text/javascript" src="js/webcam.min.js"></script>
+    <script language="JavaScript">
+      // 3. function to take the snapshot and publish to channel
+      function take_snapshot() {
+        // take snapshot and get image data
+        Webcam.snap(function (data_uri) {
+          // display results in page
+          publish(sendto, data_uri);
+        });
+      }
 
-  <script type="text/javascript" src="js/webcam.min.js"></script>
-  <script language="JavaScript">
-    function take_snapshot() {
-      // take snapshot and get image data
-      Webcam.snap(function (data_uri) {
-        // display results in page
-        publish(sendto, data_uri);
+      Webcam.set({
+        width: 320,
+        height: 240,
+        image_format: "jpeg",
+        jpeg_quality: 50,
+        flip_horiz: true,
       });
-    }
+      Webcam.attach("#my_camera");
 
-    Webcam.set({
-      width: 320,
-      height: 240,
-      image_format: "jpeg",
-      jpeg_quality: 50,
-      flip_horiz: true
-    });
-    Webcam.attach("#my_camera");
-
-    function onConnect() {
-      client.subscribe(myTopic);
-      client.subscribe(myTopic2);
-      console.log("connection successful");
-      setInterval(() => {
-        take_snapshot();
-      }, 10000);
-    }
-
-    const publish = (topic, msg) => {
-      //takes topic and message string
-      let message = new Paho.MQTT.Message(msg);
-      message.destinationName = topic;
-      client.send(message);
-    };
-
-    function onConnectionLost(responseObject) {
-      if (responseObject.errorCode !== 0) {
-        console.log("onConnectionLost:" + responseObject.errorMessage);
+      // 2. subsribing to the channels and scheduling the photo
+      function onConnect() {
+        client.subscribe(myTopic);
+        client.subscribe(myTopic2);
+        console.log("connection successful");
+        setInterval(() => {
+          take_snapshot();
+        }, 10000);
       }
-      client.connect({ onSuccess: onConnect });
-    }
 
-    //  [["person", 0.9918680787086487, [4, 24, 279, 248]]]
-    function onMessageArrived(message) {
-      console.log(
-        "Got message on topic " +
-        message.destinationName +
-        " with payload: " +
-        message.payloadString
-        //JSON parse
+      // 4. function to publish to channel
+      const publish = (topic, msg) => {
+        //takes topic and message string
+        let message = new Paho.MQTT.Message(msg);
+        message.destinationName = topic;
+        client.send(message);
+      };
+
+      // if connection lost from 1.
+      function onConnectionLost(responseObject) {
+        if (responseObject.errorCode !== 0) {
+          console.log("onConnectionLost:" + responseObject.errorMessage);
+        }
+        client.connect({ onSuccess: onConnect });
+      }
+
+      //  5. if message from yolo3 arrives it is processed here
+      function onMessageArrived(message) {
+        console.log(
+          "Got message on topic " +
+            message.destinationName +
+            " with payload: " +
+            message.payloadString
+          //JSON parse
+        );
+        if (message.destinationName === myTopic) {
+          handlePic(message.payloadString);
+        }
+        if (message.destinationName === myTopic2) {
+          handleReply(JSON.parse(message.payloadString)[0][0]);
+        }
+      }
+
+      // 6.1 puts up the message from yolo as a picture on screen
+      function handlePic(pic) {
+        document.getElementById("results").innerHTML =
+          "<h2>Yolo3 result</h2>" + '<img src="' + pic + '"/>';
+      }
+
+      // 6.2 handles message from yolo as text, then calls on speech function
+      function handleReply(txt) {
+        if (txt === "person") {
+          speak("hej där!");
+        }
+        if (txt === "teddy bear" || txt === "dog") {
+          speak("Gullig!");
+        }
+        if (txt === "cup" || txt === "bottle") {
+          speak("Nånting drickbart!");
+        }
+        if (txt === "pottedplant" || txt === "vase") {
+          speak("Den var fin.");
+        }
+        if (txt === "cell phone") {
+          speak("Kul telefon.");
+        }
+        document.getElementById("results_text").innerHTML =
+          "<h3>Message: </h3>" + "It's a " + txt + "!";
+      }
+
+      // 7. function for speaking
+      function speak(text) {
+        speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+      }
+
+      //  1. this is where we connect to the MQTT
+      const client = new Paho.MQTT.Client(
+        "ws://test.mosquitto.org:8080/mqtt",
+        "kth/dm2518/yolo3/jk960818/imgb64"
       );
-      if (message.destinationName === myTopic) {
-        handlePic(message.payloadString);
-      }
-      if (message.destinationName === myTopic2) {
-        handleReply(JSON.parse(message.payloadString)[0][0]);
-      }
-    }
-
-    function handlePic(pic) {
-      document.getElementById("results").innerHTML =
-        "<h2>Yolo3 result</h2>" + '<img src="' + pic + '"/>';
-    }
-
-    function handleReply(txt) {
-      if (txt === "person") {
-        speak("hej där!")
-      }
-      if (txt === "teddy bear" || txt === "dog") {
-        speak("Gullig!");
-      }
-      if (txt === "cup" || txt === "bottle") {
-        speak("Nånting drickbart!");
-      }
-      if (txt === "pottedplant" || txt === "vase") {
-        speak("Den var fin.");
-      }
-      if (txt === "cell phone") {
-        speak("Kul telefon.");
-      }
-      document.getElementById("results_text").innerHTML =
-        "<h3>Message: </h3>" + "It's a " + txt + '!';
-    }
-
-    function speak(text) {
-      speechSynthesis.speak(new SpeechSynthesisUtterance(text));
-    }
-
-    //    const client = new Paho.MQTT.Client("ws://mqtt.eclipse.org/mqtt", "myJSClientId" + new Date().getTime());
-    const client = new Paho.MQTT.Client(
-      "ws://test.mosquitto.org:8080/mqtt",
-      "kth/dm2518/yolo3/jk960818/imgb64"
-    );
-    const sendto = "kth/dm2518/yolo3/jk960818/imgb64";
-    const myTopic = "kth/dm2518/reply/yolo3/jk960818/imgb64";
-    const myTopic2 = "kth/dm2518/reply/yolo3/jk960818/json";
-    client.onMessageArrived = onMessageArrived;
-    client.onConnectionLost = onConnectionLost;
-    client.connect({ onSuccess: onConnect });
-  </script>
-</body>
-
+      const sendto = "kth/dm2518/yolo3/jk960818/imgb64";
+      const myTopic = "kth/dm2518/reply/yolo3/jk960818/imgb64";
+      const myTopic2 = "kth/dm2518/reply/yolo3/jk960818/json";
+      client.onMessageArrived = onMessageArrived;
+      client.onConnectionLost = onConnectionLost;
+      client.connect({ onSuccess: onConnect });
+    </script>
+  </body>
 </html>
